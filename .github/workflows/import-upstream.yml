@@ -21,7 +21,7 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Import official upstream snapshot
+      - name: Import official upstream source snapshot
         shell: bash
         env:
           UPSTREAM_URL: https://github.com/blender/blender.git
@@ -29,7 +29,6 @@ jobs:
           IMPORT_BRANCH: import/upstream-source-20261002
           PRODUCT_NAME: Blender
           GIT_LFS_SKIP_SMUDGE: "1"
-          GIT_LFS_SKIP_PUSH: "1"
         run: |
           set -euo pipefail
 
@@ -54,12 +53,46 @@ jobs:
             mv .github/workflows .github-workflows-disabled
           fi
 
-          large_files="$(find . -type f -not -path './.git/*' -size +95M -print || true)"
-          if [ -n "$large_files" ]; then
-            echo "::error::Import stopped because files larger than 95 MiB were found:"
-            echo "$large_files"
-            exit 1
-          fi
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          root = Path(".")
+          signature = b"version https://git-lfs.github.com/spec/v1\n"
+          entries = []
+          total = 0
+
+          for path in root.rglob("*"):
+              if not path.is_file() or ".git" in path.parts:
+                  continue
+              try:
+                  data = path.read_bytes()
+              except OSError:
+                  continue
+              if not data.startswith(signature):
+                  continue
+
+              text = data.decode("utf-8", errors="replace")
+              oid = re.search(r"^oid sha256:([0-9a-f]{64})$", text, re.M)
+              size = re.search(r"^size ([0-9]+)$", text, re.M)
+              oid_value = oid.group(1) if oid else "unknown"
+              size_value = int(size.group(1)) if size else 0
+              entries.append((path.as_posix(), oid_value, size_value))
+              total += size_value
+              path.unlink()
+
+          entries.sort()
+          with open("UPSTREAM_LFS_POINTERS.txt", "w", encoding="utf-8") as f:
+              f.write("# Blender upstream Git LFS object manifest\n")
+              f.write("# Binary LFS payloads are intentionally not mirrored into this repository.\n")
+              f.write(f"# Objects: {len(entries)}\n")
+              f.write(f"# Declared bytes: {total}\n")
+              f.write("# path\tsha256\tsize_bytes\n")
+              for path, oid, size in entries:
+                  f.write(f"{path}\t{oid}\t{size}\n")
+
+          print(f"Removed {len(entries)} Git LFS pointer files representing {total} bytes of external binary assets")
+          PY
 
           cat > UPSTREAM_SOURCE.md <<EOF
           # Upstream source import
@@ -74,17 +107,23 @@ jobs:
 
           Import date: 2026-10-02
 
-          This repository contains the Blender source snapshot from the official upstream project.
-          Git LFS pointer files from upstream are preserved as pointers; external upstream LFS
-          binary objects are not re-uploaded into this repository. Upstream GitHub Actions
-          workflows are preserved under `.github-workflows-disabled/` so importing source
-          cannot automatically execute third-party CI here.
+          This repository contains the official Blender source-code snapshot from the
+          upstream branch above. Git LFS-managed binary assets are intentionally not
+          duplicated into this repository; their original paths, SHA-256 object IDs,
+          and declared sizes are recorded in `UPSTREAM_LFS_POINTERS.txt`.
+
+          Upstream GitHub Actions workflows are preserved under
+          `.github-workflows-disabled/` so importing the source cannot automatically
+          execute third-party CI in this repository.
           EOF
+
+          large_files="$(find . -type f -not -path './.git/*' -size +95M -print || true)"
+          if [ -n "$large_files" ]; then
+            echo "::error::Import stopped because regular Git files larger than 95 MiB were found:"
+            echo "$large_files"
+            exit 1
+          fi
 
           git add -A
           git commit -m "vendor: import official Blender source at $upstream_sha"
-
-          # Blender tracks many binary formats with Git LFS. The source snapshot only
-          # needs the pointer files, so bypass the LFS pre-push hook that stalled the
-          # first attempt trying to upload upstream binary objects.
           git push --no-verify origin "HEAD:refs/heads/$IMPORT_BRANCH"
