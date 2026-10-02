@@ -14,7 +14,7 @@ permissions:
 jobs:
   import-source:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 20
     steps:
       - name: Checkout bootstrap branch
         uses: actions/checkout@v4
@@ -28,6 +28,8 @@ jobs:
           UPSTREAM_BRANCH: main
           IMPORT_BRANCH: import/upstream-source-20261002
           PRODUCT_NAME: Blender
+          GIT_LFS_SKIP_SMUDGE: "1"
+          GIT_LFS_SKIP_PUSH: "1"
         run: |
           set -euo pipefail
 
@@ -40,7 +42,6 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           tmp="$(mktemp -d)"
-          export GIT_LFS_SKIP_SMUDGE=1
           git clone --depth 1 --single-branch --branch "$UPSTREAM_BRANCH" "$UPSTREAM_URL" "$tmp/upstream"
           upstream_sha="$(git -C "$tmp/upstream" rev-parse HEAD)"
 
@@ -73,13 +74,17 @@ jobs:
 
           Import date: 2026-10-02
 
-          This repository contains a source snapshot from the official upstream project.
-          Any upstream GitHub Actions workflows were preserved under
-          `.github-workflows-disabled/` so importing the source cannot automatically
-          execute third-party CI in this repository. Original project license and source
-          files are otherwise preserved in the imported snapshot.
+          This repository contains the Blender source snapshot from the official upstream project.
+          Git LFS pointer files from upstream are preserved as pointers; external upstream LFS
+          binary objects are not re-uploaded into this repository. Upstream GitHub Actions
+          workflows are preserved under `.github-workflows-disabled/` so importing source
+          cannot automatically execute third-party CI here.
           EOF
 
           git add -A
           git commit -m "vendor: import official Blender source at $upstream_sha"
-          git push origin "HEAD:refs/heads/$IMPORT_BRANCH"
+
+          # Blender tracks many binary formats with Git LFS. The source snapshot only
+          # needs the pointer files, so bypass the LFS pre-push hook that stalled the
+          # first attempt trying to upload upstream binary objects.
+          git push --no-verify origin "HEAD:refs/heads/$IMPORT_BRANCH"
