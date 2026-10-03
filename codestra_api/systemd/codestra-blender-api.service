@@ -10,7 +10,7 @@ WorkingDirectory=/srv/codestra-video
 Environment=CODESTRA_VIDEO_ROOT=/srv/codestra-video
 Environment=CODESTRA_VIDEO_MAX_JOBS=1
 Environment=CODESTRA_VIDEO_RENDER_ENABLED=1
-EnvironmentFile=-/etc/codestra-video/blender.env
+EnvironmentFile=/etc/codestra-video/blender.env
 ExecStart=/usr/bin/python3 /opt/codestra-video/blender-api/server.py --host 127.0.0.1 --port 18101
 Restart=on-failure
 RestartSec=3
