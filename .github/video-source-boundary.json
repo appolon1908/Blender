@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "repository": "appolon1908/Blender",
+  "reviewed_base_sha": "42884f20f38258b33cb2d9c4d7d7982a2112de27",
+  "reviewed_base_tree": "33c4029b7cb3e8bd268719fa0fd9692e04ca391b",
+  "tested_sources": [
+    "codestra_api/server.py"
+  ],
+  "native_engine_certified": false,
+  "scope": "owned-sidecar-source-with-frozen-native-snapshot"
+}
