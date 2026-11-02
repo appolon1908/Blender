@@ -177,6 +177,8 @@ def launch(payload: dict) -> dict:
         "log": str(log_path),
     }
     with _lock:
+        if running_count() >= MAX_JOBS:
+            raise RuntimeError("job_capacity_reached")
         _jobs[job_id] = job
 
     def worker() -> None:
